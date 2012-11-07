@@ -41,7 +41,7 @@ GetOptions(
    'feed:s'             => \$feed_url,
    'maintainer_name:s'  => \$maintainer_name,
    'maintainer_email:s' => \$maintainer_email,
-   'basenane:s'         => \$basename,
+   'basename:s'         => \$basename,
    'spec_file:s'        => \$spec_file,
    'change_file:s'      => \$change_file,
    'comment:s'          => \$comment,
