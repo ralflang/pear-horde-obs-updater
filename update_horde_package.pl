@@ -397,7 +397,7 @@ sub update_changes_file {
 
    my $file = $param->{file} || $change_file;
    my $changelog = $param->{changelog} || die "No Changelog provided.";
-   my $maintainer_name = $param->{maintainer_name} || $maintainer_name;
+   my $maintainer_name = $param->{maintainer_name} || $maintainer_name || 'Maintainer';
    my $maintainer_email = $param->{maintainer_email} || $maintainer_email;
    my $new_version = $param->{new_version} || die "Please specify the new version.";
 
@@ -405,7 +405,7 @@ sub update_changes_file {
    $new_version = $new_version->{string} if (ref($new_version) eq 'HASH');
 
    # Make sure the file works for us
-   die "Changes file doesnt seem to exist" unless ( -e $file );
+   die "Changes file $file does not seem to exist" unless ( -e $file );
    die "Changes file is not readable." unless ( -r $file );
    die "Changes file is not writable." unless ( -w $file );
 
