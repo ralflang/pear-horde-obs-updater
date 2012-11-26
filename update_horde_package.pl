@@ -352,7 +352,7 @@ sub publish_to_obs {
 
    my $api_url = get_obs_api();
 
-   my $ci_command = sprintf("osc -A %s ci -m %s", $api_url, $comment);
+   my $ci_command = sprintf("osc ar ; osc -A %s ci -m %s", $api_url, $comment);
    my $res = system($ci_command);
    warn "Something went wrong during the commit. Error Code: " . $res unless ($res == 0);
 
