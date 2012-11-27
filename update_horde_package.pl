@@ -585,18 +585,21 @@ sub compare_version {
    ### STABLE VERSIONS
 
    # Master Stable
-   return 1 if ($av->{master} > $bv->{master});
-   return -1 if ($av->{master} < $bv->{master});
-
+   # version numbers are not necessarily numeric. 
+   # They can contain characters in any place and should be compared as strings
+   return 1 if ($av->{master} gt $bv->{master});
+   return -1 if ($av->{master} lt $bv->{master});
+   ## FIXME: what do we do ith both are equal? Return 0?
+   
    # Major Stable
-   return 1 if ($av->{major} > $bv->{major});
-   return -1 if ($av->{major} < $bv->{major});
+   return 1 if ($av->{major} gt $bv->{major});
+   return -1 if ($av->{major} lt $bv->{major});
+   ## FIXME: what do we do ith both are equal? Return 0?
 
    # Minor Stable
-   return 1 if ($av->{minor} > $bv->{minor});
-   return -1 if ($av->{minor} < $bv->{minor});
-
-
+   return 1 if ($av->{minor} gt $bv->{minor});
+   return -1 if ($av->{minor} lt $bv->{minor});
+   ## FIXME: what do we do ith both are equal? Return 0?
 
 }
 
