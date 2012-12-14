@@ -21,6 +21,7 @@ use WWW::Mechanize;
 use Config::IniFiles;
 use Mail::Address;
 use File::HomeDir;
+use XML::Entities;
 
 # -------------------------------------------------------------------
 # Make sure error messages and such are more prominently displayed.
@@ -532,6 +533,7 @@ sub update_spec_file {
    my $sfh = IO::File->new($file, 'r');
    my $content = '';
    foreach my $line (<$sfh>) {
+      $line = XML::Entities::decode('all', $line);
       $line = sprintf("Version:        %s\n", $new_version) if ($line =~ /^(Version:)/);
       $content .= $line;
    }
@@ -561,6 +563,7 @@ sub compile_changelog {
       my @lines = split(/\n/, $versions_available->[$i]->{content});
       foreach my $line (@lines) {
          next unless ($line =~ /^\*\s\[.*\]/);
+         $line = XML::Entities::decode('all', $line);
          $line =~ s/^\*/\-/g;
          $changelog .= $line . "\n";
       }
