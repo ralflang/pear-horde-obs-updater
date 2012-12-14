@@ -18,6 +18,10 @@ use Mail::Address;
 use File::HomeDir;
 
 # -------------------------------------------------------------------
+# Make sure error messages and such are more prominently displayed.
+print "\n";
+
+# -------------------------------------------------------------------
 # Process the command line options
 
 # Associate Perl with the variables uses
@@ -120,7 +124,10 @@ sub determine_maintainer {
    my $source_path = File::HomeDir->my_home . "/.oscrc";
    my $source_found  = -e $source_path;
 
-   die "Unable to determine Maintainer. Please specify using --maintainer_name and --maintainer_email\n" if (!$source_found && $strict);
+   my $deathmessage = "Unable to determine Maintainer. Please specify using --maintainer_name and --maintainer_email\n";
+
+
+   die $deathmessage if (!$source_found && $strict);
    return $retval unless($source_found);
 
    my $api_url = get_obs_api();
@@ -129,6 +136,9 @@ sub determine_maintainer {
    tie my %osc_config, 'Config::IniFiles', (-file => $source_path);
    my $config = \%osc_config;
    print "\n--------------------------\nDebug Message: Contents of .oscrc (parsed)\n\n" . Dumper($config) if ($debug);
+
+   # If no email is provided within the oscrc file, throw an error.
+   die $deathmessage if (!$config->{$api_url}->{email});
 
    # Render the address
    my @config_address = Mail::Address->parse($config->{$api_url}->{email});
@@ -228,8 +238,6 @@ sub download_feed {
 sub process {
 
    my $param = shift;
-   print "\n";
-
    my $feed_data = $param->{feed_data} || die "No feed data provided.\n";
 
    # ---------------------------------------------
