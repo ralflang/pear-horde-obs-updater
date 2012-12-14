@@ -237,13 +237,35 @@ sub update_dsc_file {
    my $dsc_file = $param->{file} || $param->{dsc_file} || $dsc_file;
    return 0 if ($dsc_file eq '');
 
+   my $version = $param->{version} || die "No version number provided.\n";
+   my $maintainer_name = $param->{maintainer_name} || $maintainer_name || die "No maintainer name provided.\n";
+   my $maintainer_email = $param->{maintainer_email} || $maintainer_email || die "No maintainer email provided.\n";
+
    # Read the .dsc file
    my $dsc_fh = IO::File->new($dsc_file, 'r');
    my @lines = <$dsc_fh>;
    $dsc_fh->close();
 
-   print Dumper(@lines);
+   my @new_lines;
 
+   foreach my $line (@lines) {
+
+      ## Process Version
+      if ($line =~ /^Version\:/) {
+         $line = sprintf("Version: %s\n", $version);
+      }
+
+      ## Process Maintainer
+      if ($line =~ /^Maintainer\:/) {
+         $line = sprintf("Maintainer: %s <%s>\n", $maintainer_name, $maintainer_email);
+      }
+
+      push @new_lines, $line;
+   }
+
+   $dsc_fh->open($dsc_file, 'w');
+   print  $dsc_fh @new_lines;
+   $dsc_fh->close();
 }
 
 # -------------------------------------------------------------------
@@ -276,7 +298,8 @@ sub process {
 
    foreach my $i (keys($feed_data->{entry})) {
       my $entry = $feed_data->{entry}->{$i};
-      next unless ($entry->{title} =~ /$basename/);
+      my $search_basename = $basename . ' ';
+      next unless ($entry->{title} =~ /^$search_basename/);
 
       my $pkg_name = $basename;
 
@@ -364,7 +387,12 @@ sub process {
    });
 
    # Update an optional description file
-   update_dsc_file();
+   update_dsc_file({
+      file => $dsc_file,
+      version => $versions_available->[$target_version_index]->{version}->{string},
+      maintainer_name => $maintainer_name,
+      maintainer_email => $maintainer_email
+   });
 
    # Delete the old tarball
    delete_version_tarball({
