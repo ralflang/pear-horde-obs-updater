@@ -567,7 +567,7 @@ sub compile_changelog {
       );
 
       foreach my $line (@lines) {
-         next unless ($line =~ /^\*\s\[.*\]/);
+         next unless ($line =~ /^\*\s\[.*\]/ || $line =~ /^\ *\s\[.*\]/);
          $line = XML::Entities::decode('all', $line);
          $line =~ s/^\*/\-/g;
          $changelog .= $line . "\n";
