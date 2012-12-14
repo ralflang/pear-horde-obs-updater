@@ -362,8 +362,8 @@ sub process {
 
    # Prepare the changelog for this update.
    my $changelog = compile_changelog({
-      start => $current_version_index,
-      stop => $target_version_index,
+      stop => $current_version_index,
+      start => $target_version_index,
       versions_available => $versions_available
    });
 
@@ -498,15 +498,7 @@ sub update_changes_file {
    $cfh->close();
 
    # Preparing the new changelog content
-   $changelog = sprintf(
-      "-------------------------------------------------------------------\n%s - %s <%s>\n\n- Version %s\n%s\n\n%s",
-      strftime("%a %b %e %H:%M:%S UTC %Y", gmtime()),
-      $maintainer_name,
-      $maintainer_email,
-      $new_version,
-      $changelog,
-      $current_changelog
-   );
+   $changelog .= $current_changelog;
 
    # Reopen File for writing
    $cfh->open($file, 'w');
@@ -559,14 +551,26 @@ sub compile_changelog {
    my $start = $param->{start} || die "Please provide an index for the start version;\n";
    my $stop = $param->{stop} || die "Please provide an index for the stop version;\n";
 
-   for (my $i = $start; $i < $stop; $i++) {
+   for (my $i = $start; $i > $stop; $i--) {
       my @lines = split(/\n/, $versions_available->[$i]->{content});
+      my $new_version = $versions_available->[$i]->{version}->{string};
+
+      $changelog .= sprintf(
+         "-------------------------------------------------------------------\n%s - %s <%s>\n\n- Version %s\n",
+         strftime("%a %b %e %H:%M:%S UTC %Y", gmtime()),
+         $maintainer_name,
+         $maintainer_email,
+         $new_version
+      );
+
       foreach my $line (@lines) {
          next unless ($line =~ /^\*\s\[.*\]/);
          $line = XML::Entities::decode('all', $line);
          $line =~ s/^\*/\-/g;
          $changelog .= $line . "\n";
       }
+
+      $changelog .= "\n";
    }
 
    return $changelog;
