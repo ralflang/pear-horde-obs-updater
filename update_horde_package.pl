@@ -9,6 +9,11 @@ use IO::File;
 use XML::Simple;
 use POSIX qw(strftime);
 
+# Perl's differenciation between string and numeric comparisons
+# is something I'll never get. It's annoying, at best.
+# So don't bother me!
+no warnings 'numeric';
+
 # IMPORTANT
 # Usually the following modules are to be installed separatelly
 # through CPAN or your OS's package management.
@@ -37,6 +42,7 @@ my $path_to_package;
 my $beta;
 my $target_version;
 my $no_commit;
+my $dsc_file;
 
 # Attemt to get arguments
 GetOptions(
@@ -51,21 +57,23 @@ GetOptions(
    'comment:s'          => \$comment,
    'beta'               => \$beta,
    'target_version:s'   => \$target_version,
-   'no_commit'          => \$no_commit
+   'no_commit'          => \$no_commit,
+   'dsc_file'           => \$dsc_file
 );
 
 # Fill the gaps with default values or try to be smart
-$feed_url         = "http://pear.horde.org/feed.xml" unless ($feed_url);
-$path_to_package  = '.'                              unless ($path_to_package);
-$beta             = 0                                unless ($beta);
-$comment          = 'Automated package update.'      unless ($comment);
-$maintainer_name  = determine_maintainer('name', 1)  unless ($maintainer_name);
-$maintainer_email = determine_maintainer('email', 1) unless ($maintainer_email);
-$spec_file        = find_special_file('spec')        unless ($spec_file);
-$change_file      = find_special_file('change')      unless ($change_file);
-$target_version   = 'latest'                         unless ($target_version);
-$basename         = determine_basename()             unless ($basename);
-$no_commit        = 0                                unless ($no_commit);
+$feed_url         = "http://pear.horde.org/feed.xml"                    unless ($feed_url);
+$path_to_package  = '.'                                                 unless ($path_to_package);
+$beta             = 0                                                   unless ($beta);
+$comment          = 'Automated package update.'                         unless ($comment);
+$maintainer_name  = determine_maintainer('name', 1)                     unless ($maintainer_name);
+$maintainer_email = determine_maintainer('email', 1)                    unless ($maintainer_email);
+$spec_file        = find_special_file({type => 'spec'})                 unless ($spec_file);
+$change_file      = find_special_file({type => 'change'})               unless ($change_file);
+$target_version   = 'latest'                                            unless ($target_version);
+$basename         = determine_basename()                                unless ($basename);
+$no_commit        = 0                                                   unless ($no_commit);
+$dsc_file         = find_special_file({type => 'dsc', nonleathal => 1}) unless ($dsc_file);
 
 # If debug mode is on, print the values
 dbg_show_args();
@@ -101,7 +109,7 @@ sub dbg_show_args {
    printf "  * beta             : %s\n", $beta;
    printf "  * target_version   : %s\n", $target_version;
    printf "  * no_commit        : %s\n", $no_commit;
-
+   printf "  * dsc_file         : %s\n", $dsc_file;
 
    return 0;
 }
@@ -157,7 +165,9 @@ sub determine_maintainer {
 # more than one file is found.
 sub find_special_file {
 
-   my $type = shift;
+   my $param = shift;
+   my $type = $param->{type};
+   my $nonleathal = $param->{nonleathal} || 0;
 
    # Read package directory contents
    opendir my($dh), $path_to_package or die "Couldn't open dir '$path_to_package': $!\n";
@@ -168,6 +178,7 @@ sub find_special_file {
    my $deathmessage;
    $deathmessage = "Unable to determine Spec File. Please specify manually using --spec_file\n" if ($type eq 'spec');
    $deathmessage = "Unable to determine Changes File. Please specify manually using --change_file\n" if ($type eq 'change');
+   $deathmessage = "Unable to determine Description File. Please specify manually using --dsc_file\n" if ($type eq 'dsc');
 
    foreach my $file (@files) {
       # If not a spec file, carry on, nothing to see here
@@ -175,17 +186,20 @@ sub find_special_file {
          next unless ($file =~ /\.spec$/);
       } elsif ($type eq 'change') {
          next unless ($file =~ /\.changes$/);
+      } elsif ($type eq 'dsc') {
+         next unless ($file =~ /\.dsc$/);
       } else {
          next;
       }
 
       # Die if more than one spec file found
-      die $deathmessage unless($special_file eq '');
+      die $deathmessage unless($special_file eq '' || $nonleathal == 1);
       $special_file = $file;
    }
 
    # Die in case no spec file has been found.
-   die $deathmessage if($special_file eq '');
+   die $deathmessage if($special_file eq '' && $nonleathal == 0);
+   return '' if ($special_file eq '');
    return $path_to_package . '/' . $special_file;
 
 }
@@ -214,6 +228,22 @@ sub determine_basename {
    die "Unable to determine Basename. Specify manually using --basename.\n" if ($basename eq '');
 
    return $basename;
+}
+
+# -------------------------------------------------------------------
+sub update_dsc_file {
+   my $param = shift;
+
+   my $dsc_file = $param->{file} || $param->{dsc_file} || $dsc_file;
+   return 0 if ($dsc_file eq '');
+
+   # Read the .dsc file
+   my $dsc_fh = IO::File->new($dsc_file, 'r');
+   my @lines = <$dsc_fh>;
+   $dsc_fh->close();
+
+   print Dumper(@lines);
+
 }
 
 # -------------------------------------------------------------------
@@ -306,8 +336,6 @@ sub process {
       die "Target version equals current version. Nothing to do here :)\n";
    }
 
-   die;
-
    # Prepare the changelog for this update.
    my $changelog = compile_changelog({
       start => $current_version_index,
@@ -334,6 +362,9 @@ sub process {
       file => $spec_file,
       new_version => $versions_available->[$target_version_index]->{version}->{string}
    });
+
+   # Update an optional description file
+   update_dsc_file();
 
    # Delete the old tarball
    delete_version_tarball({
