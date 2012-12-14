@@ -120,7 +120,7 @@ sub determine_maintainer {
    my $source_path = File::HomeDir->my_home . "/.oscrc";
    my $source_found  = -e $source_path;
 
-   die "Unable to determine Maintainer. Please specify using --maintainer_name and --maintainer_email" if (!$source_found && $strict);
+   die "Unable to determine Maintainer. Please specify using --maintainer_name and --maintainer_email\n" if (!$source_found && $strict);
    return $retval unless($source_found);
 
    my $api_url = get_obs_api();
@@ -150,14 +150,14 @@ sub find_special_file {
    my $type = shift;
 
    # Read package directory contents
-   opendir my($dh), $path_to_package or die "Couldn't open dir '$path_to_package': $!";
+   opendir my($dh), $path_to_package or die "Couldn't open dir '$path_to_package': $!\n";
    my @files = readdir $dh;
    closedir $dh;
 
    my $special_file = '';
    my $deathmessage;
-   $deathmessage = "Unable to determine Spec File. Please specify manually using --spec_file" if ($type eq 'spec');
-   $deathmessage = "Unable to determine Changes File. Please specify manually using --change_file" if ($type eq 'change');
+   $deathmessage = "Unable to determine Spec File. Please specify manually using --spec_file\n" if ($type eq 'spec');
+   $deathmessage = "Unable to determine Changes File. Please specify manually using --change_file\n" if ($type eq 'change');
 
    foreach my $file (@files) {
       # If not a spec file, carry on, nothing to see here
@@ -201,7 +201,7 @@ sub determine_basename {
       $basename = $line;
    }
 
-   die "Unable to determine Basename. Specify manually using --basename." if ($basename eq '');
+   die "Unable to determine Basename. Specify manually using --basename.\n" if ($basename eq '');
 
    return $basename;
 }
@@ -228,7 +228,9 @@ sub download_feed {
 sub process {
 
    my $param = shift;
-   my $feed_data = $param->{feed_data} || die "No feed data provided.";
+   print "\n";
+
+   my $feed_data = $param->{feed_data} || die "No feed data provided.\n";
 
    # ---------------------------------------------
    # Filter relevant entries from the feed
@@ -291,6 +293,13 @@ sub process {
       });
    }
 
+   # Abort exection if target versions equals current version
+   if ($current_version_index == $target_version_index) {
+      die "Target version equals current version. Nothing to do here :)\n";
+   }
+
+   die;
+
    # Prepare the changelog for this update.
    my $changelog = compile_changelog({
       start => $current_version_index,
@@ -333,7 +342,7 @@ sub delete_version_tarball {
 
    my $param = shift;
 
-   my $version_entry = $param->{version_entry} || die "Please specify a version.";
+   my $version_entry = $param->{version_entry} || die "Please specify a version.\n";
 
    # Determine Filename
    my $download_url = $version_entry->{link}->{href};
@@ -341,7 +350,7 @@ sub delete_version_tarball {
 
    my $file_path = $path_to_package . "/" . $filename;
 
-   die "File doesn't exist or isn't writable: " . $file_path unless (-e $file_path && -w $file_path);
+   die "File doesn't exist or isn't writable: " . $file_path unless (-e $file_path && -w $file_path) . "\n";
    unlink($file_path);
 
    return 0;
@@ -364,7 +373,7 @@ sub publish_to_obs {
 sub get_obs_api {
 
    my $api_source = $path_to_package . '/.osc/_apiurl';
-   die "API information is missing." unless (-e $api_source);
+   die "API information is missing.\n" unless (-e $api_source);
 
    # Get the API address
    my $api_fh = IO::File->new($api_source, 'r');
@@ -385,7 +394,7 @@ sub download_file {
    my $target = $param->{target} || $path_to_package;
 
    my $res = system(sprintf("cd %s ; wget %s 1>/dev/null 2>&1", $target, $url));
-   die sprintf("Download of URL \"%s\" was not successful. Errorcode: %s", $url, $res) unless ($res == 0);
+   die sprintf("Download of URL \"%s\" was not successful. Errorcode: %s\n", $url, $res) unless ($res == 0);
 
    return;
 }
@@ -396,18 +405,18 @@ sub update_changes_file {
    my $param = shift;
 
    my $file = $param->{file} || $change_file;
-   my $changelog = $param->{changelog} || die "No Changelog provided.";
+   my $changelog = $param->{changelog} || die "No Changelog provided.\n";
    my $maintainer_name = $param->{maintainer_name} || $maintainer_name || 'Maintainer';
    my $maintainer_email = $param->{maintainer_email} || $maintainer_email;
-   my $new_version = $param->{new_version} || die "Please specify the new version.";
+   my $new_version = $param->{new_version} || die "Please specify the new version.\n";
 
    # We're only interested in the version string, nothing else.
    $new_version = $new_version->{string} if (ref($new_version) eq 'HASH');
 
    # Make sure the file works for us
-   die "Changes file $file does not seem to exist" unless ( -e $file );
-   die "Changes file is not readable." unless ( -r $file );
-   die "Changes file is not writable." unless ( -w $file );
+   die "Changes file $file does not seem to exist\n" unless ( -e $file );
+   die "Changes file is not readable.\n" unless ( -r $file );
+   die "Changes file is not writable.\n" unless ( -w $file );
 
    # Read the file (no write operations yet
    my $cfh = IO::File->new($file, 'r');
@@ -447,7 +456,7 @@ sub update_spec_file {
    my $file = $param->{file} || $spec_file;
    my $maintainer_name = $param->{maintainer_name} || $maintainer_name;
    my $maintainer_email = $param->{maintainer_email} || $maintainer_email;
-   my $new_version = $param->{new_version} || die "Please specify the new version.";
+   my $new_version = $param->{new_version} || die "Please specify the new version.\n";
 
    # We're only interested in the version string, nothing else.
    $new_version = $new_version->{string} if (ref($new_version) eq 'HASH');
@@ -477,9 +486,9 @@ sub compile_changelog {
    my $param = shift;
    my $changelog = '';
 
-   my $versions_available = $param->{versions_available} || die "Please provide an array of versions.";
-   my $start = $param->{start} || die "Please provide an index for the start version;";
-   my $stop = $param->{stop} || die "Please provide an index for the stop version;";
+   my $versions_available = $param->{versions_available} || die "Please provide an array of versions.\n";
+   my $start = $param->{start} || die "Please provide an index for the start version;\n";
+   my $stop = $param->{stop} || die "Please provide an index for the stop version;\n";
 
    for (my $i = $start; $i < $stop; $i++) {
       my @lines = split(/\n/, $versions_available->[$i]->{content});
@@ -501,8 +510,8 @@ sub find_version {
    my $param = shift;
    my $index = -1;
 
-   my $versions_available = $param->{versions_available} || die "Please provide an array of versions.";
-   my $target_version = $param->{target_version} || die "Please provide a target version.";
+   my $versions_available = $param->{versions_available} || die "Please provide an array of versions.\n";
+   my $target_version = $param->{target_version} || die "Please provide a target version.\n";
    my $die_if_no_match = $param->{die_if_no_match} || 0;
 
    die "Expecting an Array reference." unless (ref($versions_available) eq 'ARRAY');
@@ -514,7 +523,7 @@ sub find_version {
       last;
    }
 
-   die "No results found while searching for Version " . $target_version if ($index == -1 && $die_if_no_match);
+   die "No results found while searching for Version " . $target_version . "\n" if ($index == -1 && $die_if_no_match);
 
    return $index;
 }
@@ -585,12 +594,12 @@ sub compare_version {
    ### STABLE VERSIONS
 
    # Master Stable
-   # version numbers are not necessarily numeric. 
+   # version numbers are not necessarily numeric.
    # They can contain characters in any place and should be compared as strings
    return 1 if ($av->{master} gt $bv->{master});
    return -1 if ($av->{master} lt $bv->{master});
    ## FIXME: what do we do ith both are equal? Return 0?
-   
+
    # Major Stable
    return 1 if ($av->{major} gt $bv->{major});
    return -1 if ($av->{major} lt $bv->{major});
