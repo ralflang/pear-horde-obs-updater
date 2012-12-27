@@ -431,13 +431,15 @@ sub delete_version_tarball {
 # Update the file list in osc versioning, commit
 sub publish_to_obs {
 
-   my $api_url = get_obs_api();
-
+   my $api_url = get_obs_api();   
+   chdir($path_to_package);
    my $ar_command = "osc ar";
    my $ci_command = sprintf("osc -A %s ci -m \"%s\"", $api_url, $comment);
    my $res_ar = system($ar_command);
    my $res = system($ci_command);
    warn "Something went wrong during the commit. Error Code: " . $res unless ($res == 0);
+   
+   return $res;
 }
 
 # -------------------------------------------------------------------
