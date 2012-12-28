@@ -7,7 +7,7 @@ use Getopt::Long;
 use Data::Dumper;
 use IO::File;
 use XML::Simple;
-use POSIX qw(strftime locale_h);
+use POSIX qw(strftime locale_h LC_ALL LC_CTYPE);
 
 # Perl's differenciation between string and numeric comparisons
 # is something I'll never get. It's annoying, at best.
@@ -16,6 +16,7 @@ no warnings 'numeric';
 
 # Force standard locale to avoid localized Month names, etc.
 setlocale(LC_CTYPE, "C");
+setlocale(LC_ALL, "C");
 
 # IMPORTANT
 # Usually the following modules are to be installed separatelly
