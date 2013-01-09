@@ -76,7 +76,7 @@ $maintainer_email = determine_maintainer('email', 1)                    unless (
 $spec_file        = find_special_file({type => 'spec'})                 unless ($spec_file);
 $change_file      = find_special_file({type => 'change'})               unless ($change_file);
 $target_version   = 'latest'                                            unless ($target_version);
-$basename         = determine_basename()                                unless ($basename);
+$basename         = determine_basename($spec_file)                      unless ($basename);
 $no_commit        = 0                                                   unless ($no_commit);
 $dsc_file         = find_special_file({type => 'dsc', nonleathal => 1}) unless ($dsc_file);
 
@@ -212,7 +212,7 @@ sub find_special_file {
 # -------------------------------------------------------------------
 # Try to determine the package's basename.
 sub determine_basename {
-
+   my $spec_file = shift;
    # Read the spec file
    my $spec_fh = IO::File->new($spec_file, 'r');
    my @lines = <$spec_fh>;
