@@ -8,11 +8,14 @@ use Data::Dumper;
 use IO::File;
 use XML::Simple;
 use POSIX qw(strftime locale_h LC_ALL LC_CTYPE);
+use File::Basename;
+use lib dirname($0);
+use Util;
 
 # Perl's differenciation between string and numeric comparisons
 # is something I'll never get. It's annoying, at best.
 # So don't bother me!
-no warnings 'numeric';
+#no warnings 'numeric';
 
 # Force standard locale to avoid localized Month names, etc.
 setlocale(LC_CTYPE, "C");
@@ -23,7 +26,7 @@ setlocale(LC_ALL, "C");
 # through CPAN or your OS's package management.
 use WWW::Mechanize;
 use Config::IniFiles;
-use Mail::Address;
+use Email::Address;
 use File::HomeDir;
 use XML::Entities;
 
@@ -46,6 +49,7 @@ my $comment;
 my $path_to_package;
 my $beta;
 my $target_version;
+my $current_version;
 my $no_commit;
 my $dsc_file;
 
@@ -61,6 +65,7 @@ GetOptions(
    'change_file:s'      => \$change_file,
    'comment:s'          => \$comment,
    'beta'               => \$beta,
+   'current_version:s'  => \$current_version,
    'target_version:s'   => \$target_version,
    'no_commit'          => \$no_commit,
    'dsc_file'           => \$dsc_file
@@ -76,6 +81,7 @@ $maintainer_email = determine_maintainer('email', 1)                    unless (
 $spec_file        = find_special_file({type => 'spec'})                 unless ($spec_file);
 $change_file      = find_special_file({type => 'change'})               unless ($change_file);
 $target_version   = 'latest'                                            unless ($target_version);
+$current_version  = '' unless ($current_version);
 $basename         = determine_basename($spec_file)                      unless ($basename);
 $no_commit        = 0                                                   unless ($no_commit);
 $dsc_file         = find_special_file({type => 'dsc', nonleathal => 1}) unless ($dsc_file);
@@ -85,8 +91,24 @@ dbg_show_args();
 
 # -------------------------------------------------------------------
 # Run
+
+my $releases = Util::get_releases(Util::download_feed({url => $feed_url }), $basename);
+my $legit_releases = Util::sort_releases(Util::filter_releases($releases));
+print Dumper $legit_releases;
+
+# foreach my $release (Util::get_best_release($releases, { stable => 1, rc => 1, beta => 1, alpha => 1, major => 0, minor => 0, patch => 0, pkg => $basename }))
+# {
+#   printf("%d.%d.%d%s\n", $release->{major}, $release->{minor}, $release->{patch}, $release->{dev});
+# }
+
+
+
+my $best_release; # Util::get_best_release(\@releases, { stable => 1, rc => 0, beta => 0, alpha => 0, major => 0, minor => 0, patch => 0, pkg => $basename });
+#print Dumper $best_release;
+
+exit;
 process({
-   feed_data => download_feed({ raw => 0, xml => 1, url => $feed_url })
+   feed_data => Util::download_feed({url => $feed_url, target_release => $best_release })
 });
 
 
@@ -154,7 +176,7 @@ sub determine_maintainer {
    die $deathmessage if (!$config->{$api_url}->{email});
 
    # Render the address
-   my @config_address = Mail::Address->parse($config->{$api_url}->{email});
+   my @config_address = Email::Address->parse($config->{$api_url}->{email});
 
    $retval->{name} = $config_address[0]->phrase;
    $retval->{email} = $config_address[0]->address;
@@ -297,8 +319,8 @@ sub process {
    my $param = shift;
    my $feed_data = $param->{feed_data} || die "No feed data provided.\n";
 
-   # ---------------------------------------------
-   # Filter relevant entries from the feed
+   #---------------------------------------------
+   #Filter relevant entries from the feed
    my $versions_available = [];
 
    foreach my $i (keys($feed_data->{entry})) {
@@ -323,6 +345,8 @@ sub process {
       $version =~ s/$basename//g;
       $version =~ s/\(.*\)//g;
       $version =~ s/^\s*(\S*(?:\s+\S+)*)\s*$/$1/;
+      $current_version = $version;
+      
 
       # Attach those new data to the entries existing data
       $entry->{pkg_name} = $pkg_name;
@@ -332,11 +356,11 @@ sub process {
       push(@$versions_available, $entry);
    }
 
-   # ---------------------------------------------
-   # Sort entries by versions
-   @$versions_available = sort compare_version @$versions_available;
+   #---------------------------------------------
+   #Sort entries by versions
+  @$versions_available = sort compare_version @$versions_available;
 
-   # Find the current version within all versions available
+   Find the current version within all versions available
    my $current_version_index = find_version({
       versions_available => $versions_available,
       target_version => determine_current_version({ raw => 1 }),
@@ -681,13 +705,13 @@ sub compare_version {
    ## FIXME: what do we do ith both are equal? Return 0?
 
    # Major Stable
-   return 1 if ($av->{major} gt $bv->{major});
-   return -1 if ($av->{major} lt $bv->{major});
+   return 1 if ($av->{major} > $bv->{major});
+   return -1 if ($av->{major} < $bv->{major});
    ## FIXME: what do we do ith both are equal? Return 0?
 
    # Minor Stable
-   return 1 if ($av->{minor} gt $bv->{minor});
-   return -1 if ($av->{minor} lt $bv->{minor});
+   return 1 if ($av->{minor} > $bv->{minor});
+   return -1 if ($av->{minor} < $bv->{minor});
    ## FIXME: what do we do ith both are equal? Return 0?
 
 }
