@@ -288,24 +288,6 @@ sub update_dsc_file {
 }
 
 # -------------------------------------------------------------------
-sub download_feed {
-
-   my $param = shift;
-
-   my $raw = $param->{raw} || 0;
-   my $xml = $param->{xml} || 1;
-   my $url = $param->{url} || $feed_url;
-
-   my $xmlproc = new XML::Simple;
-   my $netmech = WWW::Mechanize->new();
-
-   $netmech->get($url);
-
-   return $xmlproc->XMLin($netmech->content()) if ($xml || (!$raw && !$xml));
-   return $netmech->content() if ($raw);
-}
-
-# -------------------------------------------------------------------
 sub process {
 
    my $param = shift;
