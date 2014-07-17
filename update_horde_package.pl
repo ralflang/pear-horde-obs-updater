@@ -92,23 +92,15 @@ dbg_show_args();
 # -------------------------------------------------------------------
 # Run
 
-my $releases = Util::get_releases(Util::download_feed({url => $feed_url }), $basename);
+my $feed = Util::download_feed({url => $feed_url });
+my $releases = Util::get_releases($feed, $basename);
+## TODO: convert (partial) target version to a hash and supply it, if given.
 my $legit_releases = Util::sort_releases(Util::filter_releases($releases));
-print Dumper $legit_releases;
 
-# foreach my $release (Util::get_best_release($releases, { stable => 1, rc => 1, beta => 1, alpha => 1, major => 0, minor => 0, patch => 0, pkg => $basename }))
-# {
-#   printf("%d.%d.%d%s\n", $release->{major}, $release->{minor}, $release->{patch}, $release->{dev});
-# }
-
-
-
-my $best_release; # Util::get_best_release(\@releases, { stable => 1, rc => 0, beta => 0, alpha => 0, major => 0, minor => 0, patch => 0, pkg => $basename });
-#print Dumper $best_release;
-
-exit;
 process({
-   feed_data => Util::download_feed({url => $feed_url, target_release => $best_release })
+   feed_data => $feed,
+   target_release => $legit_releases->[-1],
+   releases => $releases
 });
 
 
@@ -317,120 +309,119 @@ sub download_feed {
 sub process {
 
    my $param = shift;
-   my $feed_data = $param->{feed_data} || die "No feed data provided.\n";
+#    my $feed_data = $param->{feed_data} || die "No feed data provided.\n";
+# 
+#    #---------------------------------------------
+#    #Filter relevant entries from the feed
+#    my $versions_available = [];
+# 
+#    foreach my $i (keys($feed_data->{entry})) {
+#       my $entry = $feed_data->{entry}->{$i};
+#       my $search_basename = $basename . ' ';
+#       next unless ($entry->{title} =~ /^$search_basename/);
+# 
+#       my $pkg_name = $basename;
+# 
+#       # beta or stable?
+#       my $status = $entry->{title};
+#       $status =~ s/$basename//g;
+#       $status =~ s/.*\(//g;
+#       $status =~ s/\)//g;
+#       $status =~ s/^\s*(\S*(?:\s+\S+)*)\s*$/$1/;
+# 
+#       # Filter betas unless wanted
+#       next if (!$beta && ($status eq 'alpha' || $status eq 'beta' || $status eq 'RC'));
+# 
+#       # Separate the version number
+#       my $version = $entry->{title};
+#       $version =~ s/$basename//g;
+#       $version =~ s/\(.*\)//g;
+#       $version =~ s/^\s*(\S*(?:\s+\S+)*)\s*$/$1/;
+#       $current_version = $version;
+#       
+# 
+#       # Attach those new data to the entries existing data
+#       $entry->{pkg_name} = $pkg_name;
+#       $entry->{status} = $status;
+#       $entry->{version} = normalize_version($version);
+# 
+#       push(@$versions_available, $entry);
+#    }
+# 
+#    #---------------------------------------------
+#    #Sort entries by versions
+#   @$versions_available = sort compare_version @$versions_available;
+# 
+#    Find the current version within all versions available
+#    my $current_version_index = find_version({
+#       versions_available => $versions_available,
+#       target_version => determine_current_version({ raw => 1 }),
+#       die_if_no_match => 1
+#    });
 
-   #---------------------------------------------
-   #Filter relevant entries from the feed
-   my $versions_available = [];
-
-   foreach my $i (keys($feed_data->{entry})) {
-      my $entry = $feed_data->{entry}->{$i};
-      my $search_basename = $basename . ' ';
-      next unless ($entry->{title} =~ /^$search_basename/);
-
-      my $pkg_name = $basename;
-
-      # beta or stable?
-      my $status = $entry->{title};
-      $status =~ s/$basename//g;
-      $status =~ s/.*\(//g;
-      $status =~ s/\)//g;
-      $status =~ s/^\s*(\S*(?:\s+\S+)*)\s*$/$1/;
-
-      # Filter betas unless wanted
-      next if (!$beta && ($status eq 'alpha' || $status eq 'beta' || $status eq 'RC'));
-
-      # Separate the version number
-      my $version = $entry->{title};
-      $version =~ s/$basename//g;
-      $version =~ s/\(.*\)//g;
-      $version =~ s/^\s*(\S*(?:\s+\S+)*)\s*$/$1/;
-      $current_version = $version;
-      
-
-      # Attach those new data to the entries existing data
-      $entry->{pkg_name} = $pkg_name;
-      $entry->{status} = $status;
-      $entry->{version} = normalize_version($version);
-
-      push(@$versions_available, $entry);
-   }
-
-   #---------------------------------------------
-   #Sort entries by versions
-  @$versions_available = sort compare_version @$versions_available;
-
-   Find the current version within all versions available
-   my $current_version_index = find_version({
-      versions_available => $versions_available,
-      target_version => determine_current_version({ raw => 1 }),
-      die_if_no_match => 1
-   });
-
-
-   my $target_version_index;
-
-   # Process "latest" package
-   if ($target_version eq 'latest') {
-      $target_version_index = scalar(@$versions_available) - 1;
-   } elsif ($target_version eq 'next') {
-      $target_version_index = $current_version_index + 1;
-   } else {
-      $target_version_index = find_version({
-         versions_available => $versions_available,
-         target_version => $target_version,
-         die_if_no_match => 1
-      });
-   }
-
-   # Abort exection if target versions equals current version
-   if ($current_version_index == $target_version_index) {
-      die "Target version equals current version. Nothing to do here :)\n";
-   }
-
-   # Prepare the changelog for this update.
-   my $changelog = compile_changelog({
-      stop => $current_version_index,
-      start => $target_version_index,
-      versions_available => $versions_available
-   });
-
-   # Download the new file
-   download_file({
-      url => $versions_available->[$target_version_index]->{link}->{href}
-   });
-
-   # Update the changes file
-   update_changes_file({
-      file => $change_file,
-      changelog => $changelog,
-      maintainer_name => $maintainer_name,
-      maintainer_email => $maintainer_email,
-      new_version => $versions_available->[$target_version_index]->{version}->{string}
-   });
-
-   # Update the spec file
-   update_spec_file({
-      file => $spec_file,
-      new_version => $versions_available->[$target_version_index]->{version}->{string}
-   });
-
-   # Update an optional description file
-   update_dsc_file({
-      file => $dsc_file,
-      version => $versions_available->[$target_version_index]->{version}->{string},
-      maintainer_name => $maintainer_name,
-      maintainer_email => $maintainer_email
-   });
-
-   # Delete the old tarball
-   delete_version_tarball({
-      version_entry => $versions_available->[$current_version_index]
-   });
-
-   # Do the commit unless --no_commit is set
-   publish_to_obs() unless($no_commit);
-
+#    my $target_version_index;
+# 
+#    # Process "latest" package
+#    if ($target_version eq 'latest') {
+#       $target_version_index = scalar(@$versions_available) - 1;
+#    } elsif ($target_version eq 'next') {
+#       $target_version_index = $current_version_index + 1;
+#    } else {
+#       $target_version_index = find_version({
+#          versions_available => $versions_available,
+#          target_version => $target_version,
+#          die_if_no_match => 1
+#       });
+#    }
+# 
+#    # Abort exection if target versions equals current version
+#    if ($current_version_index == $target_version_index) {
+#       die "Target version equals current version. Nothing to do here :)\n";
+#    }
+# 
+#    # Prepare the changelog for this update.
+#    my $changelog = compile_changelog({
+#       stop => $current_version_index,
+#       start => $target_version_index,
+#       versions_available => $versions_available
+#    });
+# 
+#    # Download the new file
+#    download_file({
+#       url => $versions_available->[$target_version_index]->{link}->{href}
+#    });
+# 
+#    # Update the changes file
+#    update_changes_file({
+#       file => $change_file,
+#       changelog => $changelog,
+#       maintainer_name => $maintainer_name,
+#       maintainer_email => $maintainer_email,
+#       new_version => $versions_available->[$target_version_index]->{version}->{string}
+#    });
+# 
+#    # Update the spec file
+#    update_spec_file({
+#       file => $spec_file,
+#       new_version => $versions_available->[$target_version_index]->{version}->{string}
+#    });
+# 
+#    # Update an optional description file
+#    update_dsc_file({
+#       file => $dsc_file,
+#       version => $versions_available->[$target_version_index]->{version}->{string},
+#       maintainer_name => $maintainer_name,
+#       maintainer_email => $maintainer_email
+#    });
+# 
+#    # Delete the old tarball
+#    delete_version_tarball({
+#       version_entry => $versions_available->[$current_version_index]
+#    });
+# 
+#    # Do the commit unless --no_commit is set
+#    publish_to_obs() unless($no_commit);
+# 
 }
 
 # -------------------------------------------------------------------
