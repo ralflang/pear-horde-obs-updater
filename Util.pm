@@ -114,4 +114,34 @@ sub compare_versions {
         or lc($a->{dev})   cmp lc($b->{dev})
 }
 
+sub get_specfile_version {
+   my $params = shift || {};
+   my $specfile_name = defined ($params->{specfilename}) ? $params->{specfilename} : shift [glob '*.spec'];
+   my $version = '';
+#    # Read it from the spec file
+   my $spec_fh = IO::File->new($specfile_name, 'r');
+   foreach my $line (<$spec_fh>) {
+     last if ($version) = $line =~ /^\s*Version:\s*([\w\.]*)[\s#]*/;
+   }
+   $spec_fh->close();
+   return $version;
+}
+
+
+## parse full and partial version strings
+sub version_string_to_version_hash {
+  my $version_string = shift;
+  my $major = ($version_string =~ s/^(\d+)\.*//) ? $1 : '';
+  my $minor = ($version_string =~ s/^(\d+)\.*//) ? $1 : '';
+  my $patch = ($version_string =~ s/^(\d+)\.*//) ? $1 : '';
+  my $dev   = $version_string || '';
+  my $hash = { major => $major, 
+           minor => $minor, 
+           patch => $patch, 
+           dev => $dev
+         };
+  $hash->{string} = sprintf('%d.%d.%d%s', $major, $minor, $patch, $dev) if (length($major) && length($minor) && length($patch));
+  return $hash;
+}
+
 1;
