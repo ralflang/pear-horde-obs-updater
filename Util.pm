@@ -77,9 +77,12 @@ sub get_best_release {
   
 }
 
+# params:
+## $releases ArrayRef of release hashrefs
+
 sub sort_releases {
   my $releases = shift;
-  return \(sort Util::compare_versions @$releases);
+  return [sort Util::compare_versions @$releases];
 }
 
 ## Return a version hash for comparison
@@ -89,13 +92,20 @@ sub sort_releases {
 sub release_to_version_hash {
     my $release = shift;
     my ($package, $major, $minor, $patch, $dev) = $release =~ /\/(\w+)-(\d+)\.(\d+)\.(\d+)(\w*)/;
-    return { major => $major, minor => $minor, patch => $patch, dev => $dev, pkg => $package, url => $release };
+    return { major => $major, 
+             minor => $minor, 
+             patch => $patch, 
+             dev => $dev, 
+             pkg => $package, 
+             url => $release, 
+             string => sprintf("%d.%d.%d%s", $major, $minor, $patch, $dev) 
+             };
 }
 
 ## A compare function callback for version hashes, suitable for sort
 ## returns -1, 0 or 1
 sub compare_versions {
-           $a->{major} <=> $b->{major} 
+   return  $a->{major} <=> $b->{major} 
         or $a->{minor} <=> $b->{minor} 
         or $a->{patch} <=> $b->{patch}
         ## 
