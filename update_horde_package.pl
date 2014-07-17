@@ -100,7 +100,8 @@ my $legit_releases = Util::sort_releases(Util::filter_releases($releases));
 process({
    feed_data => $feed,
    target_release => $legit_releases->[-1],
-   releases => $releases
+   releases => $releases,
+   specfilename => $spec_file
 });
 
 
@@ -360,8 +361,8 @@ sub process {
 #    if ($current_version_index == $target_version_index) {
 #       die "Target version equals current version. Nothing to do here :)\n";
 #    }
-    
-
+  my $current_version = Util::version_string_to_version_hash(Util::get_specfile_version({specfilename => $param->{specfilename}}));
+  die "Target version equals current version. Nothing to do here :)\n" if $current_version->{string} eq $param->{target_version}->{'string'};
 # 
 #    # Prepare the changelog for this update.
 #    my $changelog = compile_changelog({
@@ -648,32 +649,33 @@ sub normalize_version {
 
 }
 
-# -------------------------------------------------------------------
-sub determine_current_version {
 
-   my $param = shift;
-
-   my $raw = $param->{raw} || 1;
-   my $normalize = $param->{normalize} || 0;
-
-   my $current_version;
-
-   # Read it from the spec file
-   my $spec_fh = IO::File->new($spec_file, 'r');
-   my @lines = <$spec_fh>;
-   $spec_fh->close();
-
-   foreach my $line (@lines) {
-      next unless ($line =~ /^Version\:/);
-      $line =~ s/^Version\://g;
-      $line =~ s/^\s*(\S*(?:\s+\S+)*)\s*$/$1/;
-      $current_version = $line;
-      last;
-   }
-
-   return normalize_version($current_version) if ($normalize);
-   return $current_version;
-}
+# # -------------------------------------------------------------------
+# sub determine_current_version {
+# 
+#    my $param = shift;
+# 
+#    my $raw = $param->{raw} || 1;
+#    my $normalize = $param->{normalize} || 0;
+# 
+#    my $current_version;
+# 
+#    # Read it from the spec file
+#    my $spec_fh = IO::File->new($spec_file, 'r');
+#    my @lines = <$spec_fh>;
+#    $spec_fh->close();
+# 
+#    foreach my $line (@lines) {
+#       next unless ($line =~ /^Version\:/);
+#       $line =~ s/^Version\://g;
+#       $line =~ s/^\s*(\S*(?:\s+\S+)*)\s*$/$1/;
+#       $current_version = $line;
+#       last;
+#    }
+# 
+#    return normalize_version($current_version) if ($normalize);
+#    return $current_version;
+# }
 
 # -------------------------------------------------------------------
 exit 0;
