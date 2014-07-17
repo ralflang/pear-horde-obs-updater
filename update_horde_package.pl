@@ -340,7 +340,7 @@ sub process {
 #       target_version => determine_current_version({ raw => 1 }),
 #       die_if_no_match => 1
 #    });
-
+    
 #    my $target_version_index;
 # 
 #    # Process "latest" package
@@ -360,6 +360,8 @@ sub process {
 #    if ($current_version_index == $target_version_index) {
 #       die "Target version equals current version. Nothing to do here :)\n";
 #    }
+    
+
 # 
 #    # Prepare the changelog for this update.
 #    my $changelog = compile_changelog({
@@ -605,89 +607,6 @@ sub find_version {
    return $index;
 }
 
-# -------------------------------------------------------------------
-sub compare_version {
-
-   my $av = $a->{version};
-   my $bv = $b->{version};
-
-   ### DEV VERSIONS
-
-   # ---------------------------------
-   # Minor Dev Versiopns
-   if ($av->{dev} ne '' && $av->{minor} == $bv->{minor}) {
-
-      # Compare dev states (alpha, beta, RC)
-      if ($bv->{dev} ne '' && $av->{dev} ne $bv->{dev}) {
-         return 1 if (($av->{dev} eq 'beta' || $av->{dev} eq 'beta') && $bv->{dev} eq 'alpha');
-         return -1 if ($av->{dev} eq 'alpha' && ($bv->{dev} eq 'beta' || $bv->{dev} eq 'beta'));
-      }
-
-      # Compare releases
-      if ($av->{dev} eq $bv->{dev}) {
-         return 1 if ($av->{release} > $bv->{release});
-         return -1 if ($av->{release} < $bv->{release});
-      }
-
-   }
-
-   # ---------------------------------
-   # Major Dev Versiopns
-   if ($av->{dev} ne '' && $av->{major} == $bv->{major}) {
-
-      # Compare dev states (alpha, beta, RC)
-      if ($bv->{dev} ne '' && $av->{dev} ne $bv->{dev}) {
-         return 1 if (($av->{dev} eq 'beta' || $av->{dev} eq 'beta') && $bv->{dev} eq 'alpha');
-         return -1 if ($av->{dev} eq 'alpha' && ($bv->{dev} eq 'beta' || $bv->{dev} eq 'beta'));
-      }
-
-      # Compare releases
-      if ($av->{dev} eq $bv->{dev}) {
-         return 1 if ($av->{release} > $bv->{release});
-         return -1 if ($av->{release} < $bv->{release});
-      }
-
-   }
-
-   # ---------------------------------
-   # Master Dev versions
-   if ($av->{dev} ne '' && $av->{master} == $bv->{master}) {
-
-      # Compare dev states (alpha, beta, RC)
-      if ($bv->{dev} ne '' && $av->{dev} ne $bv->{dev}) {
-         return 1 if (($av->{dev} eq 'beta' || $av->{dev} eq 'beta') && $bv->{dev} eq 'alpha');
-         return -1 if ($av->{dev} eq 'alpha' && ($bv->{dev} eq 'beta' || $bv->{dev} eq 'beta'));
-      }
-
-      # Compare releases
-      if ($av->{dev} eq $bv->{dev}) {
-         return 1 if ($av->{release} > $bv->{release});
-         return -1 if ($av->{release} < $bv->{release});
-      }
-
-   }
-
-   # ---------------------------------
-   ### STABLE VERSIONS
-
-   # Master Stable
-   # version numbers are not necessarily numeric.
-   # They can contain characters in any place and should be compared as strings
-   return 1 if ($av->{master} gt $bv->{master});
-   return -1 if ($av->{master} lt $bv->{master});
-   ## FIXME: what do we do ith both are equal? Return 0?
-
-   # Major Stable
-   return 1 if ($av->{major} > $bv->{major});
-   return -1 if ($av->{major} < $bv->{major});
-   ## FIXME: what do we do ith both are equal? Return 0?
-
-   # Minor Stable
-   return 1 if ($av->{minor} > $bv->{minor});
-   return -1 if ($av->{minor} < $bv->{minor});
-   ## FIXME: what do we do ith both are equal? Return 0?
-
-}
 
 # -------------------------------------------------------------------
 sub normalize_version {
