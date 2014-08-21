@@ -93,6 +93,7 @@ dbg_show_args();
 # Run
 
 my $feed = Util::download_feed({url => $feed_url });
+
 my $releases = Util::get_releases($feed, $basename);
 ## TODO: convert (partial) target version to a hash and supply it, if given.
 my $legit_releases = Util::sort_releases(Util::filter_releases($releases));
@@ -362,7 +363,11 @@ sub process {
 #       die "Target version equals current version. Nothing to do here :)\n";
 #    }
   my $current_version = Util::version_string_to_version_hash(Util::get_specfile_version({specfilename => $param->{specfilename}}));
-  die "Target version equals current version. Nothing to do here :)\n" if $current_version->{string} eq $param->{target_version}->{'string'};
+  die "Target version equals current version. Nothing to do here :)\n" if $current_version->{string} eq $param->{target_release}->{'string'};
+
+  
+  
+  
 # 
 #    # Prepare the changelog for this update.
 #    my $changelog = compile_changelog({
