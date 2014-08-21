@@ -144,4 +144,23 @@ sub version_string_to_version_hash {
   return $hash;
 }
 
+## parse the changelog from the <content> tags of the feed <entry> section
+sub feed_get_changelog_by_version {
+  my $feed = shift;
+  my $version = shift;
+  return {'version' => $version->{'string'}, 'changes' => $feed->{'entry'}->{$version->{'url'}}->{content} };
+}
+
+sub meta_add_changelog {
+
+}
+
+sub rpm_changes_add_changelog {
+
+}
+
+sub debian_add_changelog {
+
+}
+
 1;
