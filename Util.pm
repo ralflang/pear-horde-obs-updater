@@ -105,13 +105,13 @@ sub release_to_version_hash {
 ## A compare function callback for version hashes, suitable for sort
 ## returns -1, 0 or 1
 sub compare_versions {
-   return  $a->{major} <=> $b->{major} 
+   return  ($a->{major} <=> $b->{major} 
         or $a->{minor} <=> $b->{minor} 
         or $a->{patch} <=> $b->{patch}
         ## 
         or ( !$a->{dev} && $b->{dev} ? 1 : 0 )
         or ( !$b->{dev} && $a->{dev} ? -1 : 0 )
-        or lc($a->{dev})   cmp lc($b->{dev})
+        or lc($a->{dev})   cmp lc($b->{dev}))
 }
 
 sub get_specfile_version {
