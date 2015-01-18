@@ -8,11 +8,14 @@ use Data::Dumper;
 use IO::File;
 use XML::Simple;
 use POSIX qw(strftime locale_h LC_ALL LC_CTYPE);
+use File::Basename;
+use lib dirname($0);
+use Util;
 
 # Perl's differenciation between string and numeric comparisons
 # is something I'll never get. It's annoying, at best.
 # So don't bother me!
-no warnings 'numeric';
+#no warnings 'numeric';
 
 # Force standard locale to avoid localized Month names, etc.
 setlocale(LC_CTYPE, "C");
@@ -23,7 +26,7 @@ setlocale(LC_ALL, "C");
 # through CPAN or your OS's package management.
 use WWW::Mechanize;
 use Config::IniFiles;
-use Mail::Address;
+use Email::Address;
 use File::HomeDir;
 use XML::Entities;
 
@@ -44,8 +47,11 @@ my $spec_file;
 my $change_file;
 my $comment;
 my $path_to_package;
+my $alpha;
 my $beta;
+my $rc;
 my $target_version;
+my $current_version;
 my $no_commit;
 my $dsc_file;
 
@@ -60,7 +66,10 @@ GetOptions(
    'spec_file:s'        => \$spec_file,
    'change_file:s'      => \$change_file,
    'comment:s'          => \$comment,
-   'beta'               => \$beta,
+   'alpha'               => \$alpha, # allow alpha
+   'beta'               => \$beta, # allow beta versions
+   'rc'               => \$rc, # allow rc versions
+   'current_version:s'  => \$current_version,
    'target_version:s'   => \$target_version,
    'no_commit'          => \$no_commit,
    'dsc_file'           => \$dsc_file
@@ -69,13 +78,16 @@ GetOptions(
 # Fill the gaps with default values or try to be smart
 $feed_url         = "http://pear.horde.org/feed.xml"                    unless ($feed_url);
 $path_to_package  = '.'                                                 unless ($path_to_package);
+$alpha            = 0                                                   unless ($alpha);
 $beta             = 0                                                   unless ($beta);
+$rc               = 0                                                   unless ($rc);
 $comment          = 'Automated package update.'                         unless ($comment);
 $maintainer_name  = determine_maintainer('name', 1)                     unless ($maintainer_name);
 $maintainer_email = determine_maintainer('email', 1)                    unless ($maintainer_email);
 $spec_file        = find_special_file({type => 'spec'})                 unless ($spec_file);
 $change_file      = find_special_file({type => 'change'})               unless ($change_file);
 $target_version   = 'latest'                                            unless ($target_version);
+$current_version  = '' unless ($current_version);
 $basename         = determine_basename($spec_file)                      unless ($basename);
 $no_commit        = 0                                                   unless ($no_commit);
 $dsc_file         = find_special_file({type => 'dsc', nonleathal => 1}) unless ($dsc_file);
@@ -85,8 +97,18 @@ dbg_show_args();
 
 # -------------------------------------------------------------------
 # Run
+
+my $feed = Util::download_feed({url => $feed_url });
+
+my $releases = Util::get_releases($feed, $basename);
+## TODO: convert (partial) target version to a hash and supply it, if given.
+my $legit_releases = Util::sort_releases(Util::filter_releases($releases, {alpha => $alpha, beta => $beta, rc => $rc}));
+
 process({
-   feed_data => download_feed({ raw => 0, xml => 1, url => $feed_url })
+   feed_data => $feed,
+   target_release => $legit_releases->[-1],
+   releases => $releases,
+   specfilename => $spec_file
 });
 
 
@@ -154,7 +176,7 @@ sub determine_maintainer {
    die $deathmessage if (!$config->{$api_url}->{email});
 
    # Render the address
-   my @config_address = Mail::Address->parse($config->{$api_url}->{email});
+   my @config_address = Email::Address->parse($config->{$api_url}->{email});
 
    $retval->{name} = $config_address[0]->phrase;
    $retval->{email} = $config_address[0]->address;
@@ -274,139 +296,56 @@ sub update_dsc_file {
 }
 
 # -------------------------------------------------------------------
-sub download_feed {
-
-   my $param = shift;
-
-   my $raw = $param->{raw} || 0;
-   my $xml = $param->{xml} || 1;
-   my $url = $param->{url} || $feed_url;
-
-   my $xmlproc = new XML::Simple;
-   my $netmech = WWW::Mechanize->new();
-
-   $netmech->get($url);
-
-   return $xmlproc->XMLin($netmech->content()) if ($xml || (!$raw && !$xml));
-   return $netmech->content() if ($raw);
-}
-
-# -------------------------------------------------------------------
 sub process {
 
    my $param = shift;
-   my $feed_data = $param->{feed_data} || die "No feed data provided.\n";
+   my $current_version = Util::version_string_to_version_hash(Util::get_specfile_version({specfilename => $param->{specfilename}}));
+   ## Workaround until redesign
+   $current_version->{pkg} = $param->{target_release}->{pkg};
+   my $current_url = $param->{target_release}->{url};
+   $current_url =~ s/$param->{target_release}->{string}/$current_version->{string}/;
+   $current_version->{url} = $current_url;
 
-   # ---------------------------------------------
-   # Filter relevant entries from the feed
-   my $versions_available = [];
-
-   foreach my $i (keys($feed_data->{entry})) {
-      my $entry = $feed_data->{entry}->{$i};
-      my $search_basename = $basename . ' ';
-      next unless ($entry->{title} =~ /^$search_basename/);
-
-      my $pkg_name = $basename;
-
-      # beta or stable?
-      my $status = $entry->{title};
-      $status =~ s/$basename//g;
-      $status =~ s/.*\(//g;
-      $status =~ s/\)//g;
-      $status =~ s/^\s*(\S*(?:\s+\S+)*)\s*$/$1/;
-
-      # Filter betas unless wanted
-      next if (!$beta && ($status eq 'alpha' || $status eq 'beta' || $status eq 'RC'));
-
-      # Separate the version number
-      my $version = $entry->{title};
-      $version =~ s/$basename//g;
-      $version =~ s/\(.*\)//g;
-      $version =~ s/^\s*(\S*(?:\s+\S+)*)\s*$/$1/;
-
-      # Attach those new data to the entries existing data
-      $entry->{pkg_name} = $pkg_name;
-      $entry->{status} = $status;
-      $entry->{version} = normalize_version($version);
-
-      push(@$versions_available, $entry);
-   }
-
-   # ---------------------------------------------
-   # Sort entries by versions
-   @$versions_available = sort compare_version @$versions_available;
-
-   # Find the current version within all versions available
-   my $current_version_index = find_version({
-      versions_available => $versions_available,
-      target_version => determine_current_version({ raw => 1 }),
-      die_if_no_match => 1
-   });
-
-
-   my $target_version_index;
-
-   # Process "latest" package
-   if ($target_version eq 'latest') {
-      $target_version_index = scalar(@$versions_available) - 1;
-   } elsif ($target_version eq 'next') {
-      $target_version_index = $current_version_index + 1;
-   } else {
-      $target_version_index = find_version({
-         versions_available => $versions_available,
-         target_version => $target_version,
-         die_if_no_match => 1
-      });
-   }
-
-   # Abort exection if target versions equals current version
-   if ($current_version_index == $target_version_index) {
-      die "Target version equals current version. Nothing to do here :)\n";
-   }
+   die "Target version equals current version. Nothing to do here :)\n" if $current_version->{string} eq $param->{target_release}->{'string'};
 
    # Prepare the changelog for this update.
    my $changelog = compile_changelog({
-      stop => $current_version_index,
-      start => $target_version_index,
-      versions_available => $versions_available
+      current => $current_version,
+      target => $param->{target_release},
+      feed => $param->{feed_data}
    });
-
+   
    # Download the new file
    download_file({
-      url => $versions_available->[$target_version_index]->{link}->{href}
+      url => $param->{target_release}->{url}
    });
 
-   # Update the changes file
-   update_changes_file({
-      file => $change_file,
-      changelog => $changelog,
-      maintainer_name => $maintainer_name,
-      maintainer_email => $maintainer_email,
-      new_version => $versions_available->[$target_version_index]->{version}->{string}
-   });
 
-   # Update the spec file
    update_spec_file({
       file => $spec_file,
-      new_version => $versions_available->[$target_version_index]->{version}->{string}
+      new_version => $param->{target_release}->{string}
+   });
+   update_changes_file({
+      new_version => $param->{target_release},
+      changelog => $changelog
    });
 
-   # Update an optional description file
-   update_dsc_file({
-      file => $dsc_file,
-      version => $versions_available->[$target_version_index]->{version}->{string},
-      maintainer_name => $maintainer_name,
-      maintainer_email => $maintainer_email
-   });
-
+#    # Update an optional description file
+#    update_dsc_file({
+#       file => $dsc_file,
+#       version => $versions_available->[$target_version_index]->{version}->{string},
+#       maintainer_name => $maintainer_name,
+#       maintainer_email => $maintainer_email
+#    });
+# 
    # Delete the old tarball
    delete_version_tarball({
-      version_entry => $versions_available->[$current_version_index]
+      version_entry => $current_version
    });
-
-   # Do the commit unless --no_commit is set
+# 
+#    # Do the commit unless --no_commit is set
    publish_to_obs() unless($no_commit);
-
+# 
 }
 
 # -------------------------------------------------------------------
@@ -417,7 +356,7 @@ sub delete_version_tarball {
    my $version_entry = $param->{version_entry} || die "Please specify a version.\n";
 
    # Determine Filename
-   my $download_url = $version_entry->{link}->{href};
+   my $download_url = $version_entry->{url};
    my $filename = substr($download_url, rindex($download_url, '/'));
 
    my $file_path = $path_to_package . "/" . $filename;
@@ -552,212 +491,37 @@ sub compile_changelog {
 
    my $param = shift;
    my $changelog = '';
+   
+   my $start = $param->{current} || die "Please provide an index for the current version;\n";
+   my $stop = $param->{target} || die "Please provide an index for the target version;\n";
+   my $feed = $param->{feed}  || die "No feed provided for changelog\n";
+   my $releases = Util::sort_releases(Util::get_releases($feed, $stop->{'pkg'}));
 
-   my $versions_available = $param->{versions_available} || die "Please provide an array of versions.\n";
-   my $start = $param->{start} || die "Please provide an index for the start version;\n";
-   my $stop = $param->{stop} || die "Please provide an index for the stop version;\n";
+    $changelog .= sprintf(
+        "-------------------------------------------------------------------\n%s - %s <%s>\n\n- Version %s\n\n",
+        strftime("%a %b %e %H:%M:%S UTC %Y", gmtime()),
+        'Ralf Lang',  #$maintainer_name,
+        'lang@b1-systems.de',              # $maintainer_email,
+        $stop->{string}
+    );
 
-   for (my $i = $start; $i > $stop; $i--) {
-      my @lines = split(/\n/, $versions_available->[$i]->{content});
-      my $new_version = $versions_available->[$i]->{version}->{string};
+   # filter including target but excluding current
+   foreach my $release (@$releases) {
+        next unless Util::compare_versions($release, $start) == 1;
+        next if Util::compare_versions($release, $stop) == 1;
+        my $data = $feed->{entry}->{$release->{'url'}};
+        foreach my $line (split(/\n/, $data->{'content'})) {
+            next if $line =~ /^$/;
+            next unless ($line =~ /^\*\s\[.*\]/ || $line =~ /^\ *\s\[.*\]/);
+            $line = XML::Entities::decode('all', $line);
+            $line =~ s/^\*/\-/g;
+            chomp ($line);
+            $changelog .= $line . "\n";
 
-      $changelog .= sprintf(
-         "-------------------------------------------------------------------\n%s - %s <%s>\n\n- Version %s\n",
-         strftime("%a %b %e %H:%M:%S UTC %Y", gmtime()),
-         $maintainer_name,
-         $maintainer_email,
-         $new_version
-      );
-
-      foreach my $line (@lines) {
-         next unless ($line =~ /^\*\s\[.*\]/ || $line =~ /^\ *\s\[.*\]/);
-         $line = XML::Entities::decode('all', $line);
-         $line =~ s/^\*/\-/g;
-         $changelog .= $line . "\n";
-      }
-
-      $changelog .= "\n";
-   }
-
-   return $changelog;
+        }
+    }
+    $changelog .= "\n";
+    return $changelog;
 }
 
-# -------------------------------------------------------------------
-# Finds a specified version within an array of versions, returning
-# the index. If no match is found, return -1 or die on request.
-sub find_version {
-
-   my $param = shift;
-   my $index = -1;
-
-   my $versions_available = $param->{versions_available} || die "Please provide an array of versions.\n";
-   my $target_version = $param->{target_version} || die "Please provide a target version.\n";
-   my $die_if_no_match = $param->{die_if_no_match} || 0;
-
-   die "Expecting an Array reference." unless (ref($versions_available) eq 'ARRAY');
-   $target_version = $target_version->{string} if (ref($target_version) eq 'HASH');
-
-   for (my $i = 0; $i < scalar(@$versions_available) ; $i++) {
-      next unless ($versions_available->[$i]->{version}->{string} eq $target_version);
-      $index = $i;
-      last;
-   }
-
-   die "No results found while searching for Version " . $target_version . "\n" if ($index == -1 && $die_if_no_match);
-
-   return $index;
-}
-
-# -------------------------------------------------------------------
-sub compare_version {
-
-   my $av = $a->{version};
-   my $bv = $b->{version};
-
-   ### DEV VERSIONS
-
-   # ---------------------------------
-   # Minor Dev Versiopns
-   if ($av->{dev} ne '' && $av->{minor} == $bv->{minor}) {
-
-      # Compare dev states (alpha, beta, RC)
-      if ($bv->{dev} ne '' && $av->{dev} ne $bv->{dev}) {
-         return 1 if (($av->{dev} eq 'beta' || $av->{dev} eq 'beta') && $bv->{dev} eq 'alpha');
-         return -1 if ($av->{dev} eq 'alpha' && ($bv->{dev} eq 'beta' || $bv->{dev} eq 'beta'));
-      }
-
-      # Compare releases
-      if ($av->{dev} eq $bv->{dev}) {
-         return 1 if ($av->{release} > $bv->{release});
-         return -1 if ($av->{release} < $bv->{release});
-      }
-
-   }
-
-   # ---------------------------------
-   # Major Dev Versiopns
-   if ($av->{dev} ne '' && $av->{major} == $bv->{major}) {
-
-      # Compare dev states (alpha, beta, RC)
-      if ($bv->{dev} ne '' && $av->{dev} ne $bv->{dev}) {
-         return 1 if (($av->{dev} eq 'beta' || $av->{dev} eq 'beta') && $bv->{dev} eq 'alpha');
-         return -1 if ($av->{dev} eq 'alpha' && ($bv->{dev} eq 'beta' || $bv->{dev} eq 'beta'));
-      }
-
-      # Compare releases
-      if ($av->{dev} eq $bv->{dev}) {
-         return 1 if ($av->{release} > $bv->{release});
-         return -1 if ($av->{release} < $bv->{release});
-      }
-
-   }
-
-   # ---------------------------------
-   # Master Dev versions
-   if ($av->{dev} ne '' && $av->{master} == $bv->{master}) {
-
-      # Compare dev states (alpha, beta, RC)
-      if ($bv->{dev} ne '' && $av->{dev} ne $bv->{dev}) {
-         return 1 if (($av->{dev} eq 'beta' || $av->{dev} eq 'beta') && $bv->{dev} eq 'alpha');
-         return -1 if ($av->{dev} eq 'alpha' && ($bv->{dev} eq 'beta' || $bv->{dev} eq 'beta'));
-      }
-
-      # Compare releases
-      if ($av->{dev} eq $bv->{dev}) {
-         return 1 if ($av->{release} > $bv->{release});
-         return -1 if ($av->{release} < $bv->{release});
-      }
-
-   }
-
-   # ---------------------------------
-   ### STABLE VERSIONS
-
-   # Master Stable
-   # version numbers are not necessarily numeric.
-   # They can contain characters in any place and should be compared as strings
-   return 1 if ($av->{master} gt $bv->{master});
-   return -1 if ($av->{master} lt $bv->{master});
-   ## FIXME: what do we do ith both are equal? Return 0?
-
-   # Major Stable
-   return 1 if ($av->{major} gt $bv->{major});
-   return -1 if ($av->{major} lt $bv->{major});
-   ## FIXME: what do we do ith both are equal? Return 0?
-
-   # Minor Stable
-   return 1 if ($av->{minor} gt $bv->{minor});
-   return -1 if ($av->{minor} lt $bv->{minor});
-   ## FIXME: what do we do ith both are equal? Return 0?
-
-}
-
-# -------------------------------------------------------------------
-sub normalize_version {
-
-   my $version = shift;
-
-   my $retval = {
-      string => $version,
-      master => '',
-      major => '',
-      minor => '',
-      dev => '',
-      release => ''
-   };
-
-
-   # Determine development status
-   my $dev;
-   $dev = 'alpha' if ($version =~ /alpha/);
-   $dev = 'beta' if ($version =~ /beta/);
-   $dev = 'RC' if ($version =~ /RC/);
-   $retval->{dev} = $dev if ($dev);
-
-   # Determine development release
-   if ($dev) {
-      my $release = $version;
-      $release =~ s/^.*(?:alpha|beta|RC)//g;
-      $retval->{release} = $release;
-   }
-
-   # Cut Dev stuff away from the version string
-   $version =~ s/(?:alpha|beta|RC).*$//g;
-   my @parts = split(/\./, $version);
-   $retval->{master} = $parts[0];
-   $retval->{major} = $parts[1];
-   $retval->{minor} = $parts[2];
-
-   return $retval;
-
-}
-
-# -------------------------------------------------------------------
-sub determine_current_version {
-
-   my $param = shift;
-
-   my $raw = $param->{raw} || 1;
-   my $normalize = $param->{normalize} || 0;
-
-   my $current_version;
-
-   # Read it from the spec file
-   my $spec_fh = IO::File->new($spec_file, 'r');
-   my @lines = <$spec_fh>;
-   $spec_fh->close();
-
-   foreach my $line (@lines) {
-      next unless ($line =~ /^Version\:/);
-      $line =~ s/^Version\://g;
-      $line =~ s/^\s*(\S*(?:\s+\S+)*)\s*$/$1/;
-      $current_version = $line;
-      last;
-   }
-
-   return normalize_version($current_version) if ($normalize);
-   return $current_version;
-}
-
-# -------------------------------------------------------------------
 exit 0;
