@@ -47,7 +47,9 @@ my $spec_file;
 my $change_file;
 my $comment;
 my $path_to_package;
+my $alpha;
 my $beta;
+my $rc;
 my $target_version;
 my $current_version;
 my $no_commit;
@@ -64,7 +66,9 @@ GetOptions(
    'spec_file:s'        => \$spec_file,
    'change_file:s'      => \$change_file,
    'comment:s'          => \$comment,
-   'beta'               => \$beta,
+   'alpha'               => \$alpha, # allow alpha
+   'beta'               => \$beta, # allow beta versions
+   'rc'               => \$rc, # allow rc versions
    'current_version:s'  => \$current_version,
    'target_version:s'   => \$target_version,
    'no_commit'          => \$no_commit,
@@ -74,7 +78,9 @@ GetOptions(
 # Fill the gaps with default values or try to be smart
 $feed_url         = "http://pear.horde.org/feed.xml"                    unless ($feed_url);
 $path_to_package  = '.'                                                 unless ($path_to_package);
+$alpha            = 0                                                   unless ($alpha);
 $beta             = 0                                                   unless ($beta);
+$rc               = 0                                                   unless ($rc);
 $comment          = 'Automated package update.'                         unless ($comment);
 $maintainer_name  = determine_maintainer('name', 1)                     unless ($maintainer_name);
 $maintainer_email = determine_maintainer('email', 1)                    unless ($maintainer_email);
@@ -96,7 +102,7 @@ my $feed = Util::download_feed({url => $feed_url });
 
 my $releases = Util::get_releases($feed, $basename);
 ## TODO: convert (partial) target version to a hash and supply it, if given.
-my $legit_releases = Util::sort_releases(Util::filter_releases($releases));
+my $legit_releases = Util::sort_releases(Util::filter_releases($releases, {alpha => $alpha, beta => $beta, rc => $rc}));
 
 process({
    feed_data => $feed,

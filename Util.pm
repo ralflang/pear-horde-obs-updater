@@ -45,14 +45,23 @@ sub get_releases {
 
 sub filter_releases {
   my $releases = shift;
-  my $filter = shift || { stable => 1, rc => 0, beta => 0, alpha => 0, major => 0, minor => 0, patch => 0, pkg => '' };
+  my $filter = shift || {};
+  $filter->{stable} = 1 unless exists($filter->{stable});
+  $filter->{rc}     = 0 unless exists($filter->{rc});
+  $filter->{beta}   = 0 unless exists($filter->{beta});
+  $filter->{alpha}  = 0 unless exists($filter->{alpha});
+  $filter->{major}  = 0 unless exists($filter->{major});
+  $filter->{minor}  = 0 unless exists($filter->{minor});
+  $filter->{patch}  = 0 unless exists($filter->{patch});
+  $filter->{pkg}    = '' unless exists($filter->{pkg});
+  
   my @legit;
   foreach my $pkg (@$releases) {
     ## filters
     next if ($filter->{pkg} && $pkg->{pkg} ne $filter->{pkg});
     next if ($pkg->{dev} =~ /RC/ && $filter->{'rc'} == 0);
-    next if ($pkg->{dev} =~ /alpha/ && $filter->{'rc'} == 0);
-    next if ($pkg->{dev} =~ /beta/ && $filter->{'rc'} == 0);
+    next if ($pkg->{dev} =~ /alpha/ && $filter->{'alpha'} == 0);
+    next if ($pkg->{dev} =~ /beta/ && $filter->{'beta'} == 0);
     next if ($filter->{major} && $filter->{major} != $pkg->{major});
     next if ($filter->{minor} && $filter->{minor} != $pkg->{minor});
     next if ($filter->{patch} && $filter->{minor} != $pkg->{patch});
