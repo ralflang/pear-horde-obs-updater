@@ -300,6 +300,7 @@ sub process {
 
    my $param = shift;
    my $current_version = Util::version_string_to_version_hash(Util::get_specfile_version({specfilename => $param->{specfilename}}));
+   die "No Target version - maybe you should enable rc/beta/alpha versions first?" unless $param->{target_release};
    ## Workaround until redesign
    $current_version->{pkg} = $param->{target_release}->{pkg};
    my $current_url = $param->{target_release}->{url};
