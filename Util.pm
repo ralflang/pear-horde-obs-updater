@@ -114,6 +114,8 @@ sub release_to_version_hash {
 ## A compare function callback for version hashes, suitable for sort
 ## returns -1, 0 or 1
 sub compare_versions {
+   $a = shift if @_;
+   $b = shift if @_;
    return  ($a->{major} <=> $b->{major} 
         or $a->{minor} <=> $b->{minor} 
         or $a->{patch} <=> $b->{patch}

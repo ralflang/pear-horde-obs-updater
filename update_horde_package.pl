@@ -299,109 +299,37 @@ sub update_dsc_file {
 sub process {
 
    my $param = shift;
-#    my $feed_data = $param->{feed_data} || die "No feed data provided.\n";
-# 
-#    #---------------------------------------------
-#    #Filter relevant entries from the feed
-#    my $versions_available = [];
-# 
-#    foreach my $i (keys($feed_data->{entry})) {
-#       my $entry = $feed_data->{entry}->{$i};
-#       my $search_basename = $basename . ' ';
-#       next unless ($entry->{title} =~ /^$search_basename/);
-# 
-#       my $pkg_name = $basename;
-# 
-#       # beta or stable?
-#       my $status = $entry->{title};
-#       $status =~ s/$basename//g;
-#       $status =~ s/.*\(//g;
-#       $status =~ s/\)//g;
-#       $status =~ s/^\s*(\S*(?:\s+\S+)*)\s*$/$1/;
-# 
-#       # Filter betas unless wanted
-#       next if (!$beta && ($status eq 'alpha' || $status eq 'beta' || $status eq 'RC'));
-# 
-#       # Separate the version number
-#       my $version = $entry->{title};
-#       $version =~ s/$basename//g;
-#       $version =~ s/\(.*\)//g;
-#       $version =~ s/^\s*(\S*(?:\s+\S+)*)\s*$/$1/;
-#       $current_version = $version;
-#       
-# 
-#       # Attach those new data to the entries existing data
-#       $entry->{pkg_name} = $pkg_name;
-#       $entry->{status} = $status;
-#       $entry->{version} = normalize_version($version);
-# 
-#       push(@$versions_available, $entry);
-#    }
-# 
-#    #---------------------------------------------
-#    #Sort entries by versions
-#   @$versions_available = sort compare_version @$versions_available;
-# 
-#    Find the current version within all versions available
-#    my $current_version_index = find_version({
-#       versions_available => $versions_available,
-#       target_version => determine_current_version({ raw => 1 }),
-#       die_if_no_match => 1
-#    });
-    
-#    my $target_version_index;
-# 
-#    # Process "latest" package
-#    if ($target_version eq 'latest') {
-#       $target_version_index = scalar(@$versions_available) - 1;
-#    } elsif ($target_version eq 'next') {
-#       $target_version_index = $current_version_index + 1;
-#    } else {
-#       $target_version_index = find_version({
-#          versions_available => $versions_available,
-#          target_version => $target_version,
-#          die_if_no_match => 1
-#       });
-#    }
-# 
-#    # Abort exection if target versions equals current version
-#    if ($current_version_index == $target_version_index) {
-#       die "Target version equals current version. Nothing to do here :)\n";
-#    }
-  my $current_version = Util::version_string_to_version_hash(Util::get_specfile_version({specfilename => $param->{specfilename}}));
-  die "Target version equals current version. Nothing to do here :)\n" if $current_version->{string} eq $param->{target_release}->{'string'};
+   my $current_version = Util::version_string_to_version_hash(Util::get_specfile_version({specfilename => $param->{specfilename}}));
+   ## Workaround until redesign
+   $current_version->{pkg} = $param->{target_release}->{pkg};
+   my $current_url = $param->{target_release}->{url};
+   $current_url =~ s/$param->{target_release}->{string}/$current_version->{string}/;
+   $current_version->{url} = $current_url;
 
-  
-  
-  
-# 
-#    # Prepare the changelog for this update.
-#    my $changelog = compile_changelog({
-#       stop => $current_version_index,
-#       start => $target_version_index,
-#       versions_available => $versions_available
-#    });
-# 
-#    # Download the new file
-#    download_file({
-#       url => $versions_available->[$target_version_index]->{link}->{href}
-#    });
-# 
-#    # Update the changes file
-#    update_changes_file({
-#       file => $change_file,
-#       changelog => $changelog,
-#       maintainer_name => $maintainer_name,
-#       maintainer_email => $maintainer_email,
-#       new_version => $versions_available->[$target_version_index]->{version}->{string}
-#    });
-# 
-#    # Update the spec file
-#    update_spec_file({
-#       file => $spec_file,
-#       new_version => $versions_available->[$target_version_index]->{version}->{string}
-#    });
-# 
+   die "Target version equals current version. Nothing to do here :)\n" if $current_version->{string} eq $param->{target_release}->{'string'};
+
+   # Prepare the changelog for this update.
+   my $changelog = compile_changelog({
+      current => $current_version,
+      target => $param->{target_release},
+      feed => $param->{feed_data}
+   });
+   
+   # Download the new file
+   download_file({
+      url => $param->{target_release}->{url}
+   });
+
+
+   update_spec_file({
+      file => $spec_file,
+      new_version => $param->{target_release}->{string}
+   });
+   update_changes_file({
+      new_version => $param->{target_release},
+      changelog => $changelog
+   });
+
 #    # Update an optional description file
 #    update_dsc_file({
 #       file => $dsc_file,
@@ -410,13 +338,13 @@ sub process {
 #       maintainer_email => $maintainer_email
 #    });
 # 
-#    # Delete the old tarball
-#    delete_version_tarball({
-#       version_entry => $versions_available->[$current_version_index]
-#    });
+   # Delete the old tarball
+   delete_version_tarball({
+      version_entry => $current_version
+   });
 # 
 #    # Do the commit unless --no_commit is set
-#    publish_to_obs() unless($no_commit);
+   publish_to_obs() unless($no_commit);
 # 
 }
 
@@ -428,7 +356,7 @@ sub delete_version_tarball {
    my $version_entry = $param->{version_entry} || die "Please specify a version.\n";
 
    # Determine Filename
-   my $download_url = $version_entry->{link}->{href};
+   my $download_url = $version_entry->{url};
    my $filename = substr($download_url, rindex($download_url, '/'));
 
    my $file_path = $path_to_package . "/" . $filename;
@@ -563,34 +491,37 @@ sub compile_changelog {
 
    my $param = shift;
    my $changelog = '';
+   
+   my $start = $param->{current} || die "Please provide an index for the current version;\n";
+   my $stop = $param->{target} || die "Please provide an index for the target version;\n";
+   my $feed = $param->{feed}  || die "No feed provided for changelog\n";
+   my $releases = Util::sort_releases(Util::get_releases($feed, $stop->{'pkg'}));
 
-   my $versions_available = $param->{versions_available} || die "Please provide an array of versions.\n";
-   my $start = $param->{start} || die "Please provide an index for the start version;\n";
-   my $stop = $param->{stop} || die "Please provide an index for the stop version;\n";
+    $changelog .= sprintf(
+        "-------------------------------------------------------------------\n%s - %s <%s>\n\n- Version %s\n\n",
+        strftime("%a %b %e %H:%M:%S UTC %Y", gmtime()),
+        'Ralf Lang',  #$maintainer_name,
+        'lang@b1-systems.de',              # $maintainer_email,
+        $stop->{string}
+    );
 
-   for (my $i = $start; $i > $stop; $i--) {
-      my @lines = split(/\n/, $versions_available->[$i]->{content});
-      my $new_version = $versions_available->[$i]->{version}->{string};
+   # filter including target but excluding current
+   foreach my $release (@$releases) {
+        next unless Util::compare_versions($release, $start) == 1;
+        next if Util::compare_versions($release, $stop) == 1;
+        my $data = $feed->{entry}->{$release->{'url'}};
+        foreach my $line (split(/\n/, $data->{'content'})) {
+            next if $line =~ /^$/;
+            next unless ($line =~ /^\*\s\[.*\]/ || $line =~ /^\ *\s\[.*\]/);
+            $line = XML::Entities::decode('all', $line);
+            $line =~ s/^\*/\-/g;
+            chomp ($line);
+            $changelog .= $line . "\n";
 
-      $changelog .= sprintf(
-         "-------------------------------------------------------------------\n%s - %s <%s>\n\n- Version %s\n",
-         strftime("%a %b %e %H:%M:%S UTC %Y", gmtime()),
-         $maintainer_name,
-         $maintainer_email,
-         $new_version
-      );
-
-      foreach my $line (@lines) {
-         next unless ($line =~ /^\*\s\[.*\]/ || $line =~ /^\ *\s\[.*\]/);
-         $line = XML::Entities::decode('all', $line);
-         $line =~ s/^\*/\-/g;
-         $changelog .= $line . "\n";
-      }
-
-      $changelog .= "\n";
-   }
-
-   return $changelog;
+        }
+    }
+    $changelog .= "\n";
+    return $changelog;
 }
 
 exit 0;
