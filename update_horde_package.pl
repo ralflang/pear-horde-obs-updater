@@ -321,10 +321,9 @@ sub process {
       url => $param->{target_release}->{url}
    });
 
-
    update_spec_file({
       file => $spec_file,
-      new_version => $param->{target_release}->{string}
+      new_version => $param->{target_release}
    });
    update_changes_file({
       new_version => $param->{target_release},
@@ -464,24 +463,40 @@ sub update_spec_file {
    my $maintainer_email = $param->{maintainer_email} || $maintainer_email;
    my $new_version = $param->{new_version} || die "Please specify the new version.\n";
 
-   # We're only interested in the version string, nothing else.
-   $new_version = $new_version->{string} if (ref($new_version) eq 'HASH');
+   ## Extract package.xml
+   my $filename = sprintf('%s-%s.tgz', $new_version->{pkg}, $new_version->{string});
+   `cd $path_to_package  ; tar zxf $filename package.xml`;
+   my $xmlproc = new XML::Simple;
+   my $xml = $xmlproc->XMLin($path_to_package . '/package.xml');
+   my $requiredPackages = '';
+   foreach my $required (keys %{$xml->{dependencies}->{required}->{'package'}}) {
+      #/* It is a Horde library, not an external or an app */
+      if ($required =~ /^Horde_/) {
+         $requiredPackages .= sprintf("Requires:  php5-pear-%s >= %s\nConflicts: php5-pear-%s >= %s\n",
+                                    $required,
+                                    $xml->{dependencies}->{required}->{'package'}->{$required}->{min},
+                                    $required,
+                                    $xml->{dependencies}->{required}->{'package'}->{$required}->{exclude},
+                                );
+      }
+   }
+   unlink $path_to_package . '/package.xml';
 
-   # Read the spec file and make the changes
    my $sfh = IO::File->new($file, 'r');
    my $content = '';
+
    foreach my $line (<$sfh>) {
       $line = XML::Entities::decode('all', $line);
-      $line = sprintf("Version:        %s\n", $new_version) if ($line =~ /^(Version:)/);
+      $line = sprintf("Version:        %s\n", $new_version->{string}) if ($line =~ /^(Version:)/);
       $content .= $line;
    }
    $sfh->close();
 
+   $content =~ s|#AUTOREQ#.*#END\s+AUTOREQ#|#AUTOREQ# - Please keep this automation marker when editing\n$requiredPackages#END AUTOREQ#\n\n|smg;
    # Write new spec file content to spec file
    $sfh->open($file, 'w');
    print $sfh $content;
    $sfh->close();
-
    return 0;
 
 }
