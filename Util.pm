@@ -36,7 +36,7 @@ sub get_releases {
   my $feed = shift;
   my $basename = shift || '';
   my @releases;
-  foreach my $url (keys $feed->{entry}) {
+  foreach my $url (keys %{$feed->{entry}}) {
     next if $basename && $url !~ /$basename-/;
     push  @releases, Util::release_to_version_hash($url);
   }
@@ -73,7 +73,7 @@ sub get_best_release {
   my $filter = shift || { stable => 1, rc => 0, beta => 0, alpha => 0, major => 0, minor => 0, patch => 0, pkg => '' };
   my @legit = Util::filter_releases($releases, $filter);
   die "No apropiate version found" unless @legit;
-  return pop Util::sort_releases(@legit);
+  return pop @{Util::sort_releases(@legit)};
   
 }
 
@@ -116,7 +116,7 @@ sub compare_versions {
 
 sub get_specfile_version {
    my $params = shift || {};
-   my $specfile_name = defined ($params->{specfilename}) ? $params->{specfilename} : shift [glob '*.spec'];
+   my $specfile_name = defined ($params->{specfilename}) ? $params->{specfilename} : shift @{glob '*.spec'};
    my $version = '';
 #    # Read it from the spec file
    my $spec_fh = IO::File->new($specfile_name, 'r');
